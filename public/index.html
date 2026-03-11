@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>五子棋 - 在线对战 / 人机对战</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel">
+        <h1>五子棋</h1>
+        <p class="sub">真实感棋盘渲染 | 在线双人 | 单机人机</p>
+
+        <div class="controls">
+          <label>
+            模式
+            <select id="modeSelect">
+              <option value="ai">单机对战机器人</option>
+              <option value="online">双人在线对战</option>
+            </select>
+          </label>
+
+          <label id="aiSideLabel">
+            我方执子
+            <select id="aiSideSelect">
+              <option value="1">黑棋（先手）</option>
+              <option value="2">白棋（后手）</option>
+            </select>
+          </label>
+
+          <div id="onlineControls" class="online hidden">
+            <label>
+              房间号
+              <input id="roomInput" type="text" placeholder="例如 room-001" maxlength="32" />
+            </label>
+            <button id="joinBtn" type="button">加入房间</button>
+            <p id="onlineMeta" class="hint"></p>
+          </div>
+
+          <button id="restartBtn" type="button">重新开始</button>
+        </div>
+
+        <p id="status" class="status">请选择模式并开始。</p>
+      </section>
+
+      <section class="board-wrap">
+        <canvas id="board" width="720" height="720" aria-label="Gomoku board"></canvas>
+      </section>
+    </main>
+
+    <div id="resultModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+      <div class="modal-card">
+        <h2 id="resultTitle">对局结束</h2>
+        <p id="resultMessage"></p>
+        <button id="resultOkBtn" type="button">知道了</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
