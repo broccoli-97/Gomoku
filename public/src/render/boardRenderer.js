@@ -120,11 +120,22 @@ export class BoardRenderer {
     const cx = this.toPixel(x);
     const cy = this.toPixel(y);
     const r = this.cell * 0.48;
-    ctx.strokeStyle = 'rgba(220, 50, 50, 0.85)';
-    ctx.lineWidth = 2;
+
+    // Outer ring around the stone — bolder/more opaque than before so the
+    // last move stands out at a glance, especially the opponent's move in
+    // online mode.
+    ctx.strokeStyle = 'rgba(228, 36, 36, 0.95)';
+    ctx.lineWidth = 2.8;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
+
+    // Center dot on top of the stone — high-contrast against both black and
+    // white stones, mirrors the standard "last move" marker from Go boards.
+    ctx.fillStyle = 'rgba(228, 36, 36, 0.95)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, this.cell * 0.13, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   drawCircle(x, y, r) {

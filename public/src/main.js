@@ -21,6 +21,37 @@ const resultOkBtn = $('resultOkBtn');
 
 const renderer = new BoardRenderer(boardEl, BOARD_SIZE);
 
+const SESSION_KEY = 'gomoku_session';
+
+function readSavedSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || typeof obj !== 'object') return null;
+    if (typeof obj.roomId !== 'string' || typeof obj.token !== 'string') return null;
+    return obj;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(roomId, token) {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ roomId, token }));
+  } catch {
+    /* sessionStorage unavailable — ignore */
+  }
+}
+
+function clearSession() {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 const state = {
   mode: GAME_MODE.AI,
   board: createBoard(),
@@ -33,7 +64,7 @@ const state = {
   online: {
     client: null,
     roomId: '',
-    token: localStorage.getItem('gomoku_token') || '',
+    token: '',
     mySide: 0,
     connected: false,
     players: []
@@ -198,10 +229,28 @@ function switchMode(mode) {
 }
 
 function bindOnline(client) {
+  // 'joined' fires synchronously from the message handler BEFORE the
+  // immediately-following 'state' broadcast is processed. Updating
+  // state.online here ensures the next render() sees the correct mySide
+  // and connected flag.
+  client.on('joined', (msg) => {
+    state.online.connected = true;
+    state.online.mySide = msg.side;
+    state.online.token = msg.token;
+    state.online.roomId = msg.roomId;
+    saveSession(msg.roomId, msg.token);
+    setText(statusEl, `已加入房间 ${msg.roomId}，你是${getSideName(msg.side)}。`);
+    render();
+  });
+
   client.on('state', (msg) => {
     state.board = msg.board;
     state.turn = msg.turn;
     state.winner = msg.winner;
+    // Server is the source of truth for lastMove in online mode — the client
+    // never mutates state.board locally, so without this the highlight ring
+    // would never appear after either player's move.
+    state.lastMove = msg.lastMove || null;
     state.online.players = msg.players || [];
     render();
   });
@@ -227,21 +276,31 @@ async function joinRoom() {
     state.online.client.ws.close();
   }
 
+  // Reset local view so the previous game doesn't bleed into the new one.
+  resetLocalGame();
+  state.online.connected = false;
+  state.online.mySide = 0;
+  state.online.players = [];
+
   const client = new OnlineClient();
+  state.online.client = client;
   bindOnline(client);
 
+  // Only re-use the saved token when rejoining the SAME room — otherwise we'd
+  // hand the server a token that belongs to a different room.
+  const saved = readSavedSession();
+  const token = saved && saved.roomId === roomId ? saved.token : '';
+
   try {
-    const joined = await client.connect(roomId, state.online.token);
-    state.online.client = client;
-    state.online.connected = true;
-    state.online.roomId = joined.roomId;
-    state.online.mySide = joined.side;
-    state.online.token = joined.token;
-    localStorage.setItem('gomoku_token', joined.token);
-    setText(statusEl, `已加入房间 ${joined.roomId}，你是${getSideName(joined.side)}。`);
-  } catch {
+    await client.connect(roomId, token);
+    // 'joined' handler already populated state.online and rendered.
+  } catch (err) {
     state.online.connected = false;
-    setText(statusEl, '连接房间失败。');
+    // If the saved token was rejected (e.g. room full because the slot is
+    // still held), drop it so the next attempt starts fresh.
+    if (saved && saved.roomId === roomId) clearSession();
+    setText(statusEl, `连接房间失败：${err?.message || '未知错误'}`);
+    render();
   }
 }
 
@@ -278,5 +337,20 @@ resultModal.addEventListener('click', (ev) => {
   if (ev.target === resultModal) hideResultModal();
 });
 
+// On page load, if this tab has a saved session (sessionStorage is per-tab,
+// so a refresh keeps it but a fresh tab does not), jump straight back into
+// the same room so the user reclaims their original side via the token.
+function tryAutoReconnect() {
+  const saved = readSavedSession();
+  if (!saved || !saved.roomId) return;
+
+  modeSelect.value = GAME_MODE.ONLINE;
+  switchMode(GAME_MODE.ONLINE);
+  roomInput.value = saved.roomId;
+  // Fire-and-forget; joinRoom handles its own errors.
+  joinRoom();
+}
+
 switchMode(state.mode);
 render();
+tryAutoReconnect();

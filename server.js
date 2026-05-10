@@ -25,7 +25,8 @@ function createRoom(id) {
     turn: 1,
     players: new Map(),
     winner: 0,
-    moveCount: 0
+    moveCount: 0,
+    lastMove: null
   };
 }
 
@@ -36,6 +37,7 @@ function serializeRoomState(room) {
     board: room.board,
     turn: room.turn,
     winner: room.winner,
+    lastMove: room.lastMove,
     players: Array.from(room.players.entries()).map(([token, entry]) => ({
       token,
       side: entry.side,
@@ -145,13 +147,19 @@ wss.on('connection', (ws) => {
       const token = (data.token || '').trim();
       if (token && room.players.has(token)) {
         const existing = room.players.get(token);
-        existing.ws = ws;
-        existing.connected = true;
-        joinedRoomId = roomId;
-        playerToken = token;
-        ws.send(JSON.stringify({ type: 'joined', roomId, side: existing.side, token }));
-        broadcastRoomState(room);
-        return;
+        // Only honor the token as a reconnection when the slot is currently
+        // disconnected. Otherwise this is a different tab/browser reusing a
+        // shared token (e.g. via shared localStorage) and must NOT take over
+        // the live slot — fall through to fresh-join logic instead.
+        if (!existing.connected) {
+          existing.ws = ws;
+          existing.connected = true;
+          joinedRoomId = roomId;
+          playerToken = token;
+          ws.send(JSON.stringify({ type: 'joined', roomId, side: existing.side, token }));
+          broadcastRoomState(room);
+          return;
+        }
       }
 
       if (room.players.size >= 2) {
@@ -199,6 +207,7 @@ wss.on('connection', (ws) => {
 
       room.board[y][x] = player.side;
       room.moveCount += 1;
+      room.lastMove = { x, y };
 
       if (checkWin(room.board, x, y, player.side)) {
         room.winner = player.side;
@@ -221,6 +230,7 @@ wss.on('connection', (ws) => {
       room.turn = 1;
       room.winner = 0;
       room.moveCount = 0;
+      room.lastMove = null;
       broadcastRoomState(room);
     }
   });
@@ -230,7 +240,11 @@ wss.on('connection', (ws) => {
     const room = rooms.get(joinedRoomId);
     if (!room) return;
     const player = room.players.get(playerToken);
-    if (player) {
+    // Only mark the slot disconnected if THIS ws is still its current ws.
+    // If the slot was reassigned to a newer connection, leave it alone —
+    // otherwise the close of an old/abandoned ws would knock the live
+    // player offline.
+    if (player && player.ws === ws) {
       player.connected = false;
       broadcastRoomState(room);
     }
