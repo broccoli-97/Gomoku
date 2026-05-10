@@ -85,6 +85,49 @@ button:active {
   transform: translateY(0);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  filter: grayscale(0.35);
+}
+
+button:disabled:hover {
+  transform: none;
+  filter: grayscale(0.35);
+}
+
+.accent-btn {
+  background: linear-gradient(180deg, #d97a2c, #b3601e);
+  font-weight: 600;
+}
+
+.ghost-btn {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid #cda06a;
+}
+
+.ghost-btn:hover {
+  background: rgba(167, 106, 40, 0.08);
+  filter: none;
+}
+
+.text-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  text-decoration: underline;
+  padding: 4px 0 0;
+  font-size: 13px;
+  justify-self: center;
+}
+
+.text-btn:hover {
+  color: var(--text);
+  filter: none;
+  transform: none;
+}
+
 .status {
   margin-top: 16px;
   min-height: 22px;
@@ -100,6 +143,102 @@ button:active {
 
 .hidden {
   display: none;
+}
+
+.online-lobby {
+  display: grid;
+  gap: 12px;
+}
+
+.join-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.divider {
+  position: relative;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 2px 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 42%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.divider::before { left: 0; }
+.divider::after { right: 0; }
+
+.divider span {
+  display: inline-block;
+  padding: 0 10px;
+  background: linear-gradient(160deg, #fff7e8, #efe1c7);
+  position: relative;
+}
+
+.room-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 14px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid #d7bf9a;
+}
+
+.room-card-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.room-code {
+  font-family: "SF Mono", "Cascadia Mono", "Consolas", monospace;
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  color: var(--accent);
+  text-align: center;
+  padding: 4px 0 2px;
+  user-select: all;
+}
+
+.room-card-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.room-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #efe1c7;
+  border: 1px solid #d7bf9a;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.role-badge.host {
+  background: #fff2d4;
+  border-color: #d6a647;
+  color: #8a5a0c;
 }
 
 .board-wrap {

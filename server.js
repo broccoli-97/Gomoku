@@ -14,6 +14,20 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = new Map();
 
+function generateRoomId() {
+  // 4-digit numeric code, avoid colliding with active rooms.
+  for (let i = 0; i < 50; i++) {
+    const id = String(Math.floor(1000 + Math.random() * 9000));
+    if (!rooms.has(id)) return id;
+  }
+  // Extremely unlikely fallback if every 4-digit slot is taken.
+  return String(Date.now()).slice(-6);
+}
+
+app.get('/api/room/new', (_req, res) => {
+  res.json({ roomId: generateRoomId() });
+});
+
 function createEmptyBoard() {
   return Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(0));
 }
@@ -38,6 +52,7 @@ function serializeRoomState(room) {
     turn: room.turn,
     winner: room.winner,
     lastMove: room.lastMove,
+    moveCount: room.moveCount,
     players: Array.from(room.players.entries()).map(([token, entry]) => ({
       token,
       side: entry.side,
@@ -225,6 +240,20 @@ wss.on('connection', (ws) => {
       if (!joinedRoomId) return;
       const room = rooms.get(joinedRoomId);
       if (!room) return;
+      const player = room.players.get(playerToken);
+      if (!player) return;
+
+      // Host = the BLACK side (first joiner). Only the host may restart, and
+      // only when the current game is over OR no moves have been made yet —
+      // otherwise the host could wipe an in-progress game on the opponent.
+      if (player.side !== 1) {
+        ws.send(JSON.stringify({ type: 'error', message: '仅房主可重新开始' }));
+        return;
+      }
+      if (room.winner === 0 && room.moveCount > 0) {
+        ws.send(JSON.stringify({ type: 'error', message: '对局进行中，无法重新开始' }));
+        return;
+      }
 
       room.board = createEmptyBoard();
       room.turn = 1;

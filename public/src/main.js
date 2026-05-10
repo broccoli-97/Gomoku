@@ -10,8 +10,16 @@ const modeSelect = $('modeSelect');
 const aiSideSelect = $('aiSideSelect');
 const aiSideLabel = $('aiSideLabel');
 const onlineControls = $('onlineControls');
+const onlineLobby = $('onlineLobby');
+const onlineRoom = $('onlineRoom');
 const roomInput = $('roomInput');
 const joinBtn = $('joinBtn');
+const createBtn = $('createBtn');
+const copyCodeBtn = $('copyCodeBtn');
+const copyLinkBtn = $('copyLinkBtn');
+const leaveBtn = $('leaveBtn');
+const roomCodeDisplay = $('roomCodeDisplay');
+const roleBadge = $('roleBadge');
 const restartBtn = $('restartBtn');
 const statusEl = $('status');
 const onlineMeta = $('onlineMeta');
@@ -67,7 +75,8 @@ const state = {
     token: '',
     mySide: 0,
     connected: false,
-    players: []
+    players: [],
+    moveCount: 0
   }
 };
 
@@ -96,6 +105,27 @@ function getSideName(side) {
   return '无';
 }
 
+function isHost() {
+  return state.mode === GAME_MODE.ONLINE && state.online.mySide === BLACK;
+}
+
+function canRestart() {
+  if (state.mode === GAME_MODE.AI) return true;
+  if (!state.online.connected) return false;
+  if (!isHost()) return false;
+  // Allow restart only when the current game is over OR no moves yet —
+  // matches the server-side check so the button can't get out of sync.
+  return state.winner !== 0 || state.online.moveCount === 0;
+}
+
+function getRestartTooltip() {
+  if (state.mode === GAME_MODE.AI) return '';
+  if (!state.online.connected) return '请先加入房间';
+  if (!isHost()) return '仅房主可重新开始';
+  if (state.winner === 0 && state.online.moveCount > 0) return '对局进行中，无法重新开始';
+  return '';
+}
+
 function resetLocalGame() {
   state.board = createBoard();
   state.turn = BLACK;
@@ -115,37 +145,65 @@ function render() {
   renderer.draw(state.board, state.lastMove);
 
   if (state.mode === GAME_MODE.AI) {
-    if (state.winner === 3) {
-      setText(statusEl, '对局结束。');
-    } else if (state.winner) {
+    if (state.winner) {
       setText(statusEl, '对局结束。');
     } else {
       const myTurn = state.turn === state.humanSide;
       setText(statusEl, myTurn ? `轮到你（${getSideName(state.humanSide)}）` : '机器人思考中...');
     }
+    restartBtn.disabled = false;
+    restartBtn.title = '';
     notifyResultIfNeeded();
     return;
   }
 
   const online = state.online;
+
+  toggle(onlineLobby, !online.connected);
+  toggle(onlineRoom, online.connected);
+
+  if (online.connected) {
+    roomCodeDisplay.textContent = online.roomId || '----';
+    const host = isHost();
+    if (online.mySide === BLACK) {
+      roleBadge.textContent = '房主 · 黑棋';
+    } else if (online.mySide === WHITE) {
+      roleBadge.textContent = '访客 · 白棋';
+    } else {
+      roleBadge.textContent = '加入中…';
+    }
+    roleBadge.classList.toggle('host', host);
+
+    const connectedCount = online.players.filter((p) => p.connected).length;
+    setText(onlineMeta, `· 在线 ${connectedCount}/2`);
+  }
+
   const meSide = getSideName(online.mySide);
   const turnSide = getSideName(state.turn);
+  const connectedCount = online.players.filter((p) => p.connected).length;
 
   if (!online.connected) {
-    setText(statusEl, '在线模式：请先加入房间。');
+    setText(statusEl, '在线模式：创建房间或输入 4 位房间号加入。');
   } else if (state.winner === 3) {
-    setText(statusEl, '在线模式：对局结束。');
+    setText(statusEl, '在线模式：本局平局。');
   } else if (state.winner) {
-    setText(statusEl, '在线模式：对局结束。');
+    const won = state.winner === online.mySide;
+    setText(statusEl, won ? '在线模式：恭喜，你赢了！' : '在线模式：本局失败，对手获胜。');
+  } else if (connectedCount < 2) {
+    setText(statusEl, `在线模式：你是${meSide}，等待对手加入…`);
   } else if (!online.mySide) {
     setText(statusEl, '在线模式：房间状态异常。');
   } else {
     const mineTurn = state.turn === online.mySide;
-    setText(statusEl, `在线模式：你是${meSide}，当前${turnSide}落子${mineTurn ? '（你的回合）' : ''}`);
+    setText(
+      statusEl,
+      mineTurn ? `在线模式：你的回合（${meSide}）` : `在线模式：等待对手落子（${turnSide}）`
+    );
   }
 
-  const connectedCount = online.players.filter((p) => p.connected).length;
-  setText(onlineMeta, `房间：${online.roomId || '-'} | 已连接玩家：${connectedCount}/2`);
+  restartBtn.disabled = !canRestart();
+  restartBtn.title = getRestartTooltip();
+
   notifyResultIfNeeded();
 }
 
@@ -223,6 +281,7 @@ function switchMode(mode) {
     state.online.connected = false;
     state.online.mySide = 0;
     state.online.players = [];
+    state.online.moveCount = 0;
     setText(onlineMeta, '');
     render();
   }
@@ -252,6 +311,7 @@ function bindOnline(client) {
     // would never appear after either player's move.
     state.lastMove = msg.lastMove || null;
     state.online.players = msg.players || [];
+    state.online.moveCount = msg.moveCount || 0;
     render();
   });
 
@@ -281,6 +341,7 @@ async function joinRoom() {
   state.online.connected = false;
   state.online.mySide = 0;
   state.online.players = [];
+  state.online.moveCount = 0;
 
   const client = new OnlineClient();
   state.online.client = client;
@@ -301,6 +362,90 @@ async function joinRoom() {
     if (saved && saved.roomId === roomId) clearSession();
     setText(statusEl, `连接房间失败：${err?.message || '未知错误'}`);
     render();
+  }
+}
+
+async function createRoom() {
+  createBtn.disabled = true;
+  try {
+    const resp = await fetch('/api/room/new');
+    if (!resp.ok) throw new Error('服务器无响应');
+    const data = await resp.json();
+    if (!data || !data.roomId) throw new Error('无效响应');
+    // Drop any saved session for a different room so joinRoom starts fresh
+    // and we become the host (BLACK) of the new room.
+    clearSession();
+    roomInput.value = data.roomId;
+    await joinRoom();
+  } catch (err) {
+    setText(statusEl, `创建房间失败：${err?.message || '未知错误'}`);
+  } finally {
+    createBtn.disabled = false;
+  }
+}
+
+function buildInviteLink(roomId) {
+  return `${location.origin}${location.pathname}?room=${encodeURIComponent(roomId)}`;
+}
+
+function flashButton(btn, text) {
+  if (!btn) return;
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+  btn.textContent = text;
+  setTimeout(() => {
+    btn.textContent = btn.dataset.label;
+  }, 1500);
+}
+
+async function copyText(text, btn) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      // execCommand fallback for http (non-secure context) and older browsers.
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    flashButton(btn, '已复制');
+  } catch {
+    flashButton(btn, '复制失败');
+  }
+}
+
+function leaveRoom() {
+  const client = state.online.client;
+  if (client?.ws) {
+    try { client.ws.close(); } catch { /* ignore */ }
+  }
+  state.online.client = null;
+  state.online.connected = false;
+  state.online.mySide = 0;
+  state.online.players = [];
+  state.online.token = '';
+  state.online.roomId = '';
+  state.online.moveCount = 0;
+  clearSession();
+  // Strip ?room=… so a refresh from this state doesn't re-enter the room.
+  if (location.search) {
+    history.replaceState(null, '', location.pathname);
+  }
+  resetLocalGame();
+  setText(statusEl, '已离开房间。');
+  render();
+}
+
+function getRoomFromUrl() {
+  try {
+    const params = new URLSearchParams(location.search);
+    return (params.get('room') || '').trim();
+  } catch {
+    return '';
   }
 }
 
@@ -330,6 +475,17 @@ aiSideSelect.addEventListener('change', () => {
   tryAIMove();
 });
 joinBtn.addEventListener('click', joinRoom);
+createBtn.addEventListener('click', createRoom);
+copyCodeBtn.addEventListener('click', () => {
+  if (state.online.roomId) copyText(state.online.roomId, copyCodeBtn);
+});
+copyLinkBtn.addEventListener('click', () => {
+  if (state.online.roomId) copyText(buildInviteLink(state.online.roomId), copyLinkBtn);
+});
+leaveBtn.addEventListener('click', leaveRoom);
+roomInput.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') joinRoom();
+});
 restartBtn.addEventListener('click', restart);
 boardEl.addEventListener('click', onCanvasClick);
 resultOkBtn.addEventListener('click', hideResultModal);
@@ -337,20 +493,22 @@ resultModal.addEventListener('click', (ev) => {
   if (ev.target === resultModal) hideResultModal();
 });
 
-// On page load, if this tab has a saved session (sessionStorage is per-tab,
-// so a refresh keeps it but a fresh tab does not), jump straight back into
-// the same room so the user reclaims their original side via the token.
-function tryAutoReconnect() {
+// On page load: if a ?room= invite link was used, jump straight into that
+// room. Otherwise, if this tab has a saved session (sessionStorage is per-tab,
+// so a refresh keeps it but a fresh tab does not), reclaim the original
+// side via the saved token.
+function tryAutoEnterOnline() {
+  const urlRoom = getRoomFromUrl();
   const saved = readSavedSession();
-  if (!saved || !saved.roomId) return;
+  const target = urlRoom || (saved && saved.roomId) || '';
+  if (!target) return;
 
   modeSelect.value = GAME_MODE.ONLINE;
   switchMode(GAME_MODE.ONLINE);
-  roomInput.value = saved.roomId;
-  // Fire-and-forget; joinRoom handles its own errors.
+  roomInput.value = target;
   joinRoom();
 }
 
 switchMode(state.mode);
 render();
-tryAutoReconnect();
+tryAutoEnterOnline();

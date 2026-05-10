@@ -30,12 +30,33 @@
           </label>
 
           <div id="onlineControls" class="online hidden">
-            <label>
-              房间号
-              <input id="roomInput" type="text" placeholder="例如 room-001" maxlength="32" />
-            </label>
-            <button id="joinBtn" type="button">加入房间</button>
-            <p id="onlineMeta" class="hint"></p>
+            <div id="onlineLobby" class="online-lobby">
+              <button id="createBtn" type="button" class="accent-btn">创建新房间</button>
+              <div class="divider"><span>或</span></div>
+              <label>
+                已有房间号
+                <div class="join-row">
+                  <input id="roomInput" type="text" inputmode="numeric" placeholder="4 位房间号" maxlength="32" />
+                  <button id="joinBtn" type="button">加入</button>
+                </div>
+              </label>
+            </div>
+
+            <div id="onlineRoom" class="online-room hidden">
+              <div class="room-card">
+                <div class="room-card-label">房间号 · 分享给对手</div>
+                <div id="roomCodeDisplay" class="room-code">----</div>
+                <div class="room-card-actions">
+                  <button id="copyCodeBtn" type="button" class="ghost-btn">复制房间号</button>
+                  <button id="copyLinkBtn" type="button" class="ghost-btn">复制邀请链接</button>
+                </div>
+                <div class="room-card-meta">
+                  <span id="roleBadge" class="role-badge">…</span>
+                  <span id="onlineMeta" class="online-meta"></span>
+                </div>
+                <button id="leaveBtn" type="button" class="text-btn">离开房间</button>
+              </div>
+            </div>
           </div>
 
           <button id="restartBtn" type="button">重新开始</button>
